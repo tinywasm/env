@@ -32,18 +32,18 @@ func TestGetFrom_MissingEverywhere(t *testing.T) {
 }
 
 func TestArg_EqualsForm(t *testing.T) {
-	restore := setArgs("cmd", "-server_port=6060")
+	restore := setArgs("cmd", "-server_port=8080")
 	defer restore()
-	if got := Arg("server_port"); got != "6060" {
-		t.Errorf("got %q, want %q", got, "6060")
+	if got := Arg("server_port"); got != "8080" {
+		t.Errorf("got %q, want %q", got, "8080")
 	}
 }
 
 func TestArg_SpaceForm(t *testing.T) {
-	restore := setArgs("cmd", "-server_port", "6060")
+	restore := setArgs("cmd", "-server_port", "8080")
 	defer restore()
-	if got := Arg("server_port"); got != "6060" {
-		t.Errorf("got %q, want %q", got, "6060")
+	if got := Arg("server_port"); got != "8080" {
+		t.Errorf("got %q, want %q", got, "8080")
 	}
 }
 
