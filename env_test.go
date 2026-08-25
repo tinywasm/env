@@ -1,65 +1,84 @@
+//go:build !wasm
+
 package env
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
-func staticReader(values map[string]string) Reader {
-	return func(key string) string { return values[key] }
-}
-
-func TestGet_ReadsFromReader(t *testing.T) {
-	read := staticReader(map[string]string{"KEY": "value"})
-	if got := Get(read, "KEY"); got != "value" {
-		t.Errorf("got %q, want %q", got, "value")
+func TestGet_ReadsFromEnv(t *testing.T) {
+	t.Setenv("ENV_TEST_KEY", "from-process")
+	if got := Get("ENV_TEST_KEY"); got != "from-process" {
+		t.Errorf("got %q, want %q", got, "from-process")
 	}
 }
 
 func TestGet_MissingReturnsEmpty(t *testing.T) {
-	read := staticReader(nil)
-	if got := Get(read, "MISSING"); got != "" {
+	os.Unsetenv("ENV_TEST_MISSING_123")
+	if got := Get("ENV_TEST_MISSING_123"); got != "" {
 		t.Errorf("got %q, want empty", got)
 	}
 }
 
-func TestGetRequired_PrimaryWins(t *testing.T) {
-	read := staticReader(map[string]string{"KEY": "primary"})
-	fallback := staticReader(map[string]string{"KEY": "fallback"})
-	got, err := GetRequired(read, "KEY", fallback)
-	if err != nil {
-		t.Fatalf("got error %v, want nil", err)
+func TestLookup_FoundAndMissing(t *testing.T) {
+	t.Setenv("ENV_LOOKUP_KEY", "value")
+	if v, ok := Lookup("ENV_LOOKUP_KEY"); !ok || v != "value" {
+		t.Errorf("Lookup found = %v %q, want true value", ok, v)
 	}
-	if got != "primary" {
-		t.Errorf("got %q, want %q", got, "primary")
-	}
-}
-
-func TestGetRequired_FallsBackInOrder(t *testing.T) {
-	read := staticReader(nil)
-	fallback1 := staticReader(nil)
-	fallback2 := staticReader(map[string]string{"KEY": "from-fallback-2"})
-	got, err := GetRequired(read, "KEY", fallback1, fallback2)
-	if err != nil {
-		t.Fatalf("got error %v, want nil", err)
-	}
-	if got != "from-fallback-2" {
-		t.Errorf("got %q, want %q", got, "from-fallback-2")
+	os.Unsetenv("ENV_LOOKUP_MISSING_123")
+	if _, ok := Lookup("ENV_LOOKUP_MISSING_123"); ok {
+		t.Error("Lookup missing should return not ok")
 	}
 }
 
-func TestGetRequired_NotFoundAnywhere(t *testing.T) {
-	read := staticReader(nil)
-	got, err := GetRequired(read, "KEY", staticReader(nil))
-	if err == nil {
-		t.Error("got nil error, want error for missing key")
+func TestGetOr_FallsBack(t *testing.T) {
+	os.Unsetenv("ENV_GETOR_MISSING")
+	if got := GetOr("ENV_GETOR_MISSING", "fallback"); got != "fallback" {
+		t.Errorf("got %q, want fallback", got)
 	}
-	if got != "" {
-		t.Errorf("got %q, want empty", got)
+	t.Setenv("ENV_GETOR_KEY", "primary")
+	if got := GetOr("ENV_GETOR_KEY", "fallback"); got != "primary" {
+		t.Errorf("got %q, want primary", got)
 	}
 }
 
-func TestGetRequired_NoFallbacksNotFound(t *testing.T) {
-	read := staticReader(nil)
-	_, err := GetRequired(read, "KEY")
-	if err == nil {
-		t.Error("got nil error, want error for missing key with no fallbacks")
+func TestRequire_FoundAndMissing(t *testing.T) {
+	t.Setenv("ENV_REQUIRE_KEY", "present")
+	if v, err := Require("ENV_REQUIRE_KEY"); err != nil || v != "present" {
+		t.Errorf("Require found err %v %q", err, v)
+	}
+	os.Unsetenv("ENV_REQUIRE_MISSING_123")
+	if _, err := Require("ENV_REQUIRE_MISSING_123"); err == nil {
+		t.Error("Require missing should error")
+	}
+}
+
+func TestLookup_FallsBackToDotEnv(t *testing.T) {
+	os.Unsetenv("ENV_DOTENV_KEY")
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	if err := os.WriteFile(path, []byte("OTHER=1\nENV_DOTENV_KEY=\"from-file\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	if got := Get("ENV_DOTENV_KEY"); got != "from-file" {
+		t.Errorf("got %q, want from-file", got)
+	}
+}
+
+func TestLookup_EnvVarWinsOverDotEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	os.WriteFile(path, []byte("ENV_WIN_KEY=from-file\n"), 0644)
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	t.Setenv("ENV_WIN_KEY", "from-process")
+	if got := Get("ENV_WIN_KEY"); got != "from-process" {
+		t.Errorf("got %q, want from-process", got)
 	}
 }

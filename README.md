@@ -1,21 +1,19 @@
 # env
 <img src="docs/img/badges.svg">
 
-Agnostic config reads/writes: `Get`/`GetRequired` take an injected `Reader`,
-so this package never imports `os` and stays wasm-safe. A server binary
-injects `osenv.Reader()` (process env vars, falling back to a `.env` file);
-an edge binary injects a `Reader` over its own platform binding — the same
-call works against either.
+Auto-tagged env access: `!wasm` reads `os.Getenv` (+ `.env` fallback), `wasm` reads Cloudflare `context.env` via `syscall/js`. No injection — the build tag selects the implementation. `tinywasm/fmt` is the only dep, `os` never leaks into wasm.
 
 ```go
-import (
-    "github.com/tinywasm/env"
-    "github.com/tinywasm/env/osenv"
-)
+import "github.com/tinywasm/env"
 
-dsn, err := env.GetRequired(osenv.Reader(), "DATABASE_URL")
+port := env.Get("PORT")                 // "" if unset
+dsn, err := env.Require("DATABASE_URL") // error if unset
+host := env.GetOr("HOST", "localhost")
+if v, ok := env.Lookup("KEY"); ok { ... }
+env.Set("KEY", "value") // !wasm only
+flag := env.Arg("port") // !wasm only, -port=8080 / -port 8080
 ```
 
-`osenv` also carries `Arg(key)` (CLI flag lookup via `os.Args`) and
-`Writer()` (sets a value in the current process's own environment) — both
-process-only, with no edge equivalent.
+Low-level `.env` path override: `env.LookupAt("KEY", "/path/to/.env")`.
+
+Wasm target is Cloudflare Workers (`context.env`); other wasm targets get `""`.

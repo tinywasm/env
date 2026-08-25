@@ -1,0 +1,42 @@
+//go:build wasm
+
+package env
+
+import (
+	"syscall/js"
+
+	"github.com/tinywasm/fmt"
+)
+
+// Lookup reads from Cloudflare's runtime context (context.env) via syscall/js.
+// On non-Cloudflare wasm targets, context.env will be undefined and Lookup returns not found.
+func Lookup(key string) (string, bool) {
+	ctx := js.Global().Get("context")
+	if ctx.IsNull() || ctx.IsUndefined() {
+		return "", false
+	}
+	jsEnv := ctx.Get("env")
+	if jsEnv.IsNull() || jsEnv.IsUndefined() {
+		return "", false
+	}
+	val := jsEnv.Get(key)
+	if val.IsNull() || val.IsUndefined() {
+		return "", false
+	}
+	return val.String(), true
+}
+
+// Set is not available on wasm — platform env vars are not writable at runtime.
+func Set(key, value string) error {
+	return fmt.Err("env: Set not available on wasm")
+}
+
+// Arg has no wasm equivalent — Workers have no argv.
+func Arg(key string) string {
+	return ""
+}
+
+// LookupAt is not meaningful on wasm — there is no .env file.
+func LookupAt(key, path string) (string, bool) {
+	return Lookup(key)
+}
