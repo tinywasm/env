@@ -6,6 +6,7 @@ import (
 	"syscall/js"
 
 	"github.com/tinywasm/fmt"
+	"github.com/tinywasm/keyring"
 )
 
 // Lookup reads from Cloudflare's runtime context (context.env) via syscall/js.
@@ -23,7 +24,11 @@ func Lookup(key string) (string, bool) {
 	if val.IsNull() || val.IsUndefined() {
 		return "", false
 	}
-	return val.String(), true
+	v := val.String()
+	if keyring.IsReference(v) {
+		return "", false // the marker is a local-dev convention; never a real Worker value
+	}
+	return v, true
 }
 
 // Set is not available on wasm — platform env vars are not writable at runtime.

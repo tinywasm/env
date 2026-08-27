@@ -6,7 +6,30 @@ import (
 	"os"
 
 	"github.com/tinywasm/fmt"
+	"github.com/tinywasm/keyring"
+	keyringauto "github.com/tinywasm/keyring/auto"
 )
+
+// resolveIfReference returns raw unchanged unless it is exactly
+// keyring.Scheme ("keyring://"), in which case it looks key up in the
+// keyring scoped to the current module (keyringauto.OpenForModule(".")) and
+// returns that instead. ok is false whenever the real value cannot be
+// produced — a keyring open failure or a key never stored is exactly as
+// "not found" as the key being absent from .env in the first place.
+func resolveIfReference(key, raw string) (string, bool) {
+	if !keyring.IsReference(raw) {
+		return raw, true
+	}
+	kr, err := keyringauto.OpenForModule(".")
+	if err != nil {
+		return "", false
+	}
+	v, err := kr.Get(key)
+	if err != nil {
+		return "", false
+	}
+	return v, true
+}
 
 const defaultDotEnvPath = ".env"
 
@@ -14,7 +37,7 @@ const defaultDotEnvPath = ".env"
 // to a .env file in the working directory. The bool indicates if the key was found.
 func Lookup(key string) (string, bool) {
 	if v, ok := os.LookupEnv(key); ok {
-		return v, true
+		return resolveIfReference(key, v)
 	}
 	data, err := os.ReadFile(defaultDotEnvPath)
 	if err != nil {
@@ -29,7 +52,7 @@ func Lookup(key string) (string, bool) {
 		if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
 			v = v[1 : len(v)-1]
 		}
-		return v, true
+		return resolveIfReference(key, v)
 	}
 	return "", false
 }
@@ -58,7 +81,7 @@ func Arg(key string) string {
 // LookupAt is Lookup with an explicit .env path, for callers not running from the project root.
 func LookupAt(key, path string) (string, bool) {
 	if v, ok := os.LookupEnv(key); ok {
-		return v, true
+		return resolveIfReference(key, v)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -73,7 +96,7 @@ func LookupAt(key, path string) (string, bool) {
 		if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
 			v = v[1 : len(v)-1]
 		}
-		return v, true
+		return resolveIfReference(key, v)
 	}
 	return "", false
 }
